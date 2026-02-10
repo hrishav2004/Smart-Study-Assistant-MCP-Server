@@ -1,4 +1,7 @@
 import os
+import threading
+import http.server
+import socketserver
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("Smart Researcher",
@@ -74,9 +77,25 @@ def read_note(filename: str):
 
 
 if __name__ == "__main__":
+    PORT = int(os.environ.get("PORT", 8000))
 
-    mcp.run(
-        transport="http",
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 8000))
-    )
+    def _start_health_server():
+        class HealthHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/health":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+            def log_message(self, format, *args):
+                return
+
+        with socketserver.TCPServer(("0.0.0.0", PORT), HealthHandler) as httpd:
+            print(f"Health server listening on 0.0.0.0:{PORT}")
+            httpd.serve_forever()
+
+    threading.Thread(target=_start_health_server, daemon=True).start()
+    mcp.run(transport="stdio")
